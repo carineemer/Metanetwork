@@ -1,0 +1,74 @@
+---
+title: "Haversine distance"
+author: "Carine Emer"
+date: "01/08/2017"
+output: html_document
+---
+
+```{r load packages}
+
+load_and_install <- function(x) {
+  if(!require(x, character.only = TRUE)) {
+    install.packages(x)
+    library(x, character.only = TRUE)
+  }
+}
+
+load_and_install("fields")
+load_and_install("plyr")
+load_and_install("betapart")
+
+```
+
+
+```{r input data}
+setwd("~/Dropbox/Seed dispersal data Atlantic/Metanetwork_data/MS_Carine/data")
+
+#######
+dt<-read.csv("distances.csv")
+
+p1t<-subset(dt,select = c(long1,lat1))
+p2t<-subset(dt,select = c(long2,lat2))
+
+```
+
+Code from: https://www.r-bloggers.com/great-circle-distance-calculations-in-r/
+After poking around in the rdist.earth() source code it turns out that it assumes the earth’s radius to be 6378.388 km. According to Wikipedia this number seems to be the equatorial radius (the maximum radius). Because earth is not a perfect sphere, however, the radius declines as one moves to the poles reaching a polar minimum of about 6,357 km. The mean radius is 6371 km and is what I have been using in my calculations. 
+
+```{r calculating haversine distance}
+#get pairwise distances between lon/lat points
+
+dists = rdist.earth.vec(p1t, p2t)
+print(dists)
+hist(dists)
+
+df <- cbind(dists, dt)
+
+df1<-rename(df, c("dists" = "dist_haversine"))
+head(df1)
+
+cor.test(df1$dist_haversine,df1$dist)
+
+plot(df1$dist_haversine~df1$dist, xlab="Euclidean distance (km)",
+     ylab= "Haversine distance (km)")
+
+dir.create("figures", showWarnings = FALSE)
+dev.copy2pdf(file="figures/distances_correlation.pdf")
+
+write.csv(df1,"dist_latlong_haversine.csv")
+
+
+```
+```
+
+
+
+
+```{r correlations with beta-diversity}
+
+cor.test(m3s,distm) # beta sorensen
+cor.test(m2s,distm) # turnover simpson
+
+```
+```
+
