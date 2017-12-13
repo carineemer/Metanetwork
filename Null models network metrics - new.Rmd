@@ -1,0 +1,331 @@
+---
+title: "Null models network metrics"
+author: "Carine Emer"
+date: "28/08/2017"
+output: html_document
+---
+
+
+```{r pakg}
+library(bipartite)
+library(vegan)
+```
+
+
+```{r input data}
+setwd("~/Dropbox/Seed dispersal data Atlantic/Metanetwork_data/MS_Carine/data")
+nested_int<-read.csv("nested spp interactions new.csv", header=TRUE, row.names = 1)
+nested_test<-read.csv("nested test.csv", header=TRUE, row.names = 1)
+nested_birds<-read.csv("nested spp birds new.csv", header=TRUE, row.names = 1)
+nested_plants<-read.csv("nested spp plants new.csv", header=TRUE, row.names = 1)
+```
+
+From oecosimu
+#"swap": sequential algorithm for binary matrices that changes the matrix structure, but does not influence marginal sums (Gotelli & Entsminger 2003). This inspects 2 by 2 submatrices so long that a swap can be done.
+#"tswap": sequential algorithm for binary matrices. Same as the "swap" algorithm, but it tries a fixed number of times and performs zero to many swaps at one step (according to the thin argument in the call). This approach was suggested by Miklós & Podani (2004) because they found that ordinary swap may lead to biased sequences, since some columns or rows are more easily swapped.
+
+## quasiswap - recommened by Carsten/Oksanen, is an optimized version of ‘swaps’ that reduces numbers above one to maintain marginal totals
+
+## r1,r2 preserves the site (row) frequencies, take into account commonness and rarity of species
+
+
+FROM NULLMODELS
+##swap.web -- MT, C constant --- biased, and only for quantitative matrices
+## Shuffle.web maintain the dimensionality of the network (number of links and interactions) but not the marginal totals, ie. the sum of observed interactions per fragment (rows) and the sum of interactions frequency (columns).
+
+
+
+```{r mod}
+
+m_int<-computeModules(nested_int)
+listModuleInformation(m_int) ## 16 modules ## ALWAYS THE SAME
+
+mod_birds<-computeModules(nested_birds)
+mod_birds ### VARIES A BIT
+printoutModuleInformation(mod_birds)
+listModuleInformation(mod_birds) # four modules ---- VERY UNSTABLE
+
+mod_plants<-computeModules(nested_plants)
+printoutModuleInformation(mod_plants)
+listModuleInformation(mod_plants) ## 12 modules
+
+# Give here the mean observed modularity values
+mod_obs_int <- 0.738207
+mod_obs_b <- 0.3396158
+mod_obs_p <- 0.5725531
+
+
+#########NULL MODELS
+### Modularity
+
+#Msig <- function (mat, mlike)  {
+    require(bipartite)
+    # mat is the input matrix for which M is tested
+    # mlike is the observed mean M value
+    nulls <- nullmodel(nested_birds, N=100, method=4) ## 2 = swapweb, connectance and marginal totals constant (ie, constrait degree for sites and interactions/spp)
+    modules.nulls <- sapply(nulls, computeModules)
+    like.nulls <- sapply(modules.nulls, function(x) x@likelihood)
+    z <- (mlike - mean(like.nulls))/sd(like.nulls)
+    p <- 2*pnorm(-abs(z))}
+    #cat("\n\n","P value for modularity M= ", mlike, "\n", 
+        "No. resamplings= ", N, "\n",
+        "P=  ",p)} 
+#m_birds<-Msig(nested_birds, mod_obs_b) ### 
+#m_plants<-Msig(nested_plants, mod_obs_p)
+#m_int<-Msig(nested_int, mod_obs_int)
+
+
+
+```
+
+
+## which null model to chose? tswap (Miklos & Podani 2004, quasiswap - recommened by Carsten) 
+
+##from vegan:oecosimu
+```{r nulls nestedness}
+## null models for NESTEDNESS
+
+null_r1<-oecosimu(nested_int,nestednodf,"r2",nsimul = 100, order=FALSE) ## info at commsim {vegan}
+densityplot(permustats(null_r1))
+
+# tswap - NODF ns
+# quasiswap and r2 - NODF significant
+
+#### BIRDS
+null_r1<-oecosimu(nested_birds,nestednodf,"r2",nsimul = 100, order=FALSE) ## info at commsim {vegan}
+null_r1
+densityplot(permustats(null_r1))
+
+#### PLANTS
+null_plants<-oecosimu(nested_plants,nestednodf,"r2",nsimul = 100, order=FALSE) ## info at commsim {vegan}
+null_plants
+densityplot(permustats(null_r1))
+
+```
+
+
+## from vegan:nullmodel
+```{r nulls connectance}
+obs<-networklevel(nested_int, index="connectance")
+
+nulls <- (simulate(vegan::nullmodel(nested_int, method="quasiswap"), nsim = 100))
+
+m1<-nulls[,,1]
+m2<-nulls[,,2]
+identical(m1,m2)
+
+res.nulls <- apply(nulls, 3, networklevel, index= "connectance")
+hist(res.nulls)
+z<-obs-mean(res.nulls)/sd(res.nulls)
+praw <- sum(res.nulls>(obs)) / length(res.nulls)
+ifelse(praw > 0.5, 1-praw, praw)
+
+p <- 2*pnorm(-abs(z))
+p
+
+mean(res.nulls)
+sd(res.nulls)
+
+
+#------------------- BIRDS
+obs_cB<-networklevel(nested_birds, index="connectance")
+
+nulls <- (simulate(vegan::nullmodel(nested_birds, method="r2"), nsim = 100))
+res.nulls <- apply(nulls, 3, networklevel, index= "connectance")
+hist(res.nulls)
+z<-obs_cB-mean(res.nulls)/sd(res.nulls)
+p <- 2*pnorm(-abs(z))
+p
+mean(res.nulls)
+sd(res.nulls)
+z
+#------------------- PLANTS
+obs_cP<-networklevel(nested_plants, index="connectance")
+
+nulls <- (simulate(vegan::nullmodel(nested_plants, method="r2"), nsim = 100))
+res.nulls <- apply(nulls, 3, networklevel, index= "connectance")
+hist(res.nulls)
+z<-obs_cP-mean(res.nulls)/sd(res.nulls)
+p <- 2*pnorm(-abs(z))
+p
+mean(res.nulls)
+sd(res.nulls)
+z
+```
+
+```{r nulls modularity}
+
+######---------------------------- INTERACTIONS
+m_int<-computeModules(nested_int)
+mod_obs<-0.7379964
+
+nulls_qswap <- (simulate(vegan::nullmodel(nested_int, method="quasiswap"), nsim = 100))
+    mod.nulls_qswap <- apply(nulls_qswap, 3, computeModules)
+    like.nulls.qswap <- sapply(mod.nulls_qswap, function(x) x@likelihood)
+    z_qswap <- (mod_obs - mean(like.nulls.qswap))/sd(like.nulls.qswap) #sd = 0.0008127112
+    z_qswap
+    p <- 2*pnorm(-abs(z))
+    p
+
+#####
+nulls_mod2 <- (simulate(vegan::nullmodel(nested_int, method="r2"), nsim = 100))
+    mod.nulls2 <- apply(nulls_mod2, 3, computeModules)
+    like.nulls2 <- sapply(mod.nulls2, function(x) x@likelihood)
+    z2 <- (mod_obs - mean(like.nulls2))/sd(like.nulls)#sd=0.004645199, #sdr1 = 0.005419148
+    z2
+    p <- 2*pnorm(-abs(z))
+    p
+    
+#####----------------------------- BIRDS
+mod_birds<-computeModules(nested_birds) ## 0.3413494
+obs_birds<- 0.3413494   
+nulls_qswap_b <- (simulate(vegan::nullmodel(nested_birds, method="r2"), nsim = 100))
+    mod.nulls_qswap_b <- apply(nulls_qswap_b, 3, computeModules)
+    like.nulls.qswap_b <- sapply(mod.nulls_qswap_b, function(x) x@likelihood)
+    z_qswap_b <- (obs_birds - mean(like.nulls.qswap_b))/sd(like.nulls.qswap_b) #sd =0.004423643 , mean = 0.3081806, obs = 0.3413494
+    z_qswap_b #7.498081
+    p_b <- 2*pnorm(-abs(z_qswap_b))
+    p_b  #6.475873e-14  
+  
+    
+#### PLANTS    
+    nulls_qswap_p <- (simulate(vegan::nullmodel(nested_plants, method="r2"), nsim = 100))
+    mod.nulls_qswap_p <- apply(nulls_qswap_p, 3, computeModules)
+    like.nulls.qswap_p <- sapply(mod.nulls_qswap_p, function(x) x@likelihood)
+    z_qswap_p <- (obs_plants - mean(like.nulls.qswap_p))/sd(like.nulls.qswap_p) #sd = 0.002320598, mean= 0.5596753, obs = 0.571716
+    z_qswap_p #5.188602
+    p_p<- 2*pnorm(-abs(z_qswap_p))
+    p_p #2.118791e-07
+    
+    
+```
+
+
+
+
+## from bipartite:nullmodels - mgen
+```{r nulls connectance mgen}
+
+###### CONNECTANCE
+obs_c<-networklevel(nested_int, index="connectance")
+
+null1<-nullmodel(nested_int, N=100, method="mgen")
+null <- unlist(sapply(null1, networklevel, index="connectance")) 
+
+praw <- sum(null>obs_c) / length(null)
+ifelse(praw > 0.5, 1-praw, praw)    # P-value
+
+mean_c_mgen<-mean(null)
+sd_c_mgen<-sd(null)
+
+z<-(obs_c-mean_c_mgen)/sd_c_mgen
+z
+
+# --------------------- Birds
+obs_b<-networklevel(nested_birds, index="connectance")
+
+obs_bnull1<-nullmodel(nested_birds, N=100, method="mgen")
+null_b <- unlist(sapply(obs_bnull1, networklevel, index="connectance")) 
+
+praw <- sum(null_b>obs_b) / length(null_b)
+ifelse(praw > 0.5, 1-praw, praw)    # P-value
+
+mean_c_mgenb<-mean(null_b)
+sd_c_mgenb<-sd(null_b)
+
+z<-(obs_b-mean_c_mgenb)/sd_c_mgenb
+z
+
+# --------------------- PLANTS
+obs_p<-networklevel(nested_plants, index="connectance")
+
+obs_pnull1<-nullmodel(nested_plants, N=100, method="mgen")
+null_p <- unlist(sapply(obs_pnull1, networklevel, index="connectance")) 
+
+praw <- sum(null_p>obs_p) / length(null_p)
+ifelse(praw > 0.5, 1-praw, praw)    # P-value
+
+mean_c_mgenp<-mean(null_p)
+sd_c_mgenp<-sd(null_p)
+
+z<-(obs_p-mean_c_mgenp)/sd_c_mgenp
+z
+```
+
+```{r nulls nestedness mgen}
+obs_nodf<-nested(nested_int,method= "NODF")
+obs_nodfb<-nested(nested_birds,method= "NODF")
+
+
+################ NESTEDNESS MGEN - EQUIPROBABLE
+
+null_nodf_mgen <-nullmodel(nested_birds, N=100, method="mgen") 
+null1_nodf_mgen <-sapply (X=null_nodf_mgen, FUN=nested, method="NODF") ## sapply to aplly the NODF for each random netw
+mean_null1_nodf_mgen <- apply (X=cbind(null1_nodf_mgen),MARGIN=2, FUN=mean, na.rm=T) 
+sd.null1_nodf_mgen <- apply(X=cbind(null1_nodf_mgen), MARGIN=2, FUN=sd, na.rm=T)
+z<-(obs_nodfb-mean_null1_nodf_mgen)/sd.null1_nodf_mgen
+z
+praw <- sum(null1_nodf_mgen < (obs_nodf)) / length(null1_nodf_mgen)
+ifelse(praw > 0.5, 1-praw, praw)
+
+p_nodf_mgen <- 2*pnorm(-abs(z))
+p_nodf_mgen
+
+plot(density(null1_nodf_mgen), lwd=2, xlim=c(0,40))
+abline(v=obs_nodfb, col="red", lwd=2)
+
+#------------------- PLANTS
+obs_nodfp<-nested(nested_plants,method= "NODF")
+null_nodf_mgen <-nullmodel(nested_plants, N=100, method="mgen") 
+null1_nodf_mgen <-sapply (X=null_nodf_mgen, FUN=nested, method="NODF") 
+mean_null1_nodf_mgen <- apply (X=cbind(null1_nodf_mgen),MARGIN=2, FUN=mean, na.rm=T) 
+sd.null1_nodf_mgen <- apply(X=cbind(null1_nodf_mgen), MARGIN=2, FUN=sd, na.rm=T)
+z<-(obs_nodfp-mean_null1_nodf_mgen)/sd.null1_nodf_mgen
+z
+
+
+```
+
+```{r nulls mod mgen}
+## INTERACTIONS mgen - equiprobable
+    nulls_mgen <- nullmodel(nested_int, N=100, method=5) 
+    mod.nulls_mgen <- sapply(nulls_mgen, computeModules)
+    like.nulls_mgen <- sapply(mod.nulls_mgen, function(x) x@likelihood)
+    z_mod_mgen <- (0.738 - mean(like.nulls_mgen))/sd(like.nulls_mgen)# sd=0.005392437
+    z_mod_mgen
+    p <- 2*pnorm(-abs(z_mod_mgen))
+
+##### BIRDS
+mod_birds<-computeModules(nested_birds) ## 0.3413494
+obs_birds<- 0.3413494   
+    nulls_mgenb <- nullmodel(nested_birds, N=100, method=5) 
+    mod.nulls_mgenb <- sapply(nulls_mgenb, computeModules)
+    like.nulls_mgenb <- sapply(mod.nulls_mgenb, function(x) x@likelihood)
+    z_mod_mgenb <- (obs_birds - mean(like.nulls_mgenb))/sd(like.nulls_mgenb)# sd=0.005392437, mean = 0.3720894, z = -4.011063
+    z_mod_mgenb
+    p <- 2*pnorm(-abs(z_mod_mgenb))    
+        
+    
+    
+    
+##### PLANTS    
+mod_plants<-computeModules(nested_plants) ## 0.3413494
+obs_plants<- 0.571716
+    nulls_mgenp <- nullmodel(nested_plants, N=100, method=5) 
+    mod.nulls_mgenp <- sapply(nulls_mgenp, computeModules)
+    like.nulls_mgenp <- sapply(mod.nulls_mgenp, function(x) x@likelihood)
+    z_mod_mgenp <- (obs_plants - mean(like.nulls_mgenp))/sd(like.nulls_mgenp)# sd=sd(like.nulls_mgenp), mean = 0.6093741, z = -4.049711
+    z_mod_mgenp
+    p <- 2*pnorm(-abs(z_mod_mgenp))   
+    
+    
+
+```
+
+
+
+
+
+
+
+
